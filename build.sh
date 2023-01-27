@@ -8,41 +8,24 @@
 # Specify Kernel Directory
 KERNEL_DIR="$(pwd)"
 
-BUILD=$1
 
-if [ "$BUILD" = "local" ]; then
-	if [ -e ids.txt ]; then
-		chat_id=$(awk "NR==1{print;exit}" ids.txt)
-		token=$(awk "NR==2{print;exit}" ids.txt)
-	else
-		echo "Type ur chat id:"
-		read chat
-		echo "$chat" > ids.txt
-		chat_id=$chat
-		echo "Type ur bot token:"
-		read token
-		echo "$token" >> ids.txt
-		token=$token
-	fi
-fi
-
-DEVICE=$2
+DEVICE=$1
 
 if [ "${DEVICE}" = "alioth" ]; then
 DEFCONFIG=alioth_defconfig
-MODEL=Poco F3
+MODEL="Poco F3"
 VERSION=BETA
 elif [ "${DEVICE}" = "lmi" ]; then
 DEFCONFIG=lmi_defconfig
-MODEL=Poco F2 Pro
+MODEL="Poco F2 Pro"
 VERSION=BETA
 elif [ "${DEVICE}" = "apollo" ]; then
 DEFCONFIG=apollo_defconfig
-MODEL=Mi 10T Pro
+MODEL="Mi 10T Pro"
 VERSION=BETA
 elif [ "${DEVICE}" = "munch" ]; then
 DEFCONFIG=munch_defconfig
-MODEL=Poco F4
+MODEL="Poco F4"
 VERSION=BETA
 fi
 
@@ -66,11 +49,12 @@ TM=$(date +"%F%S")
 
 # Specify Final Zip Name
 ZIPNAME=Nexus
-FINAL_ZIP=${ZIPNAME}-${VERSION}-${DEVICE}-RC3.0-KERNEL-AOSP-${TM}.zip
+FINAL_ZIP=${ZIPNAME}-${VERSION}-${DEVICE}-3.0-KERNEL-AOSP-${TM}.zip
 
 ##----------------------------------------------------------##
 # Specify compiler [ proton, atomx, eva, aosp ]
-COMPILER=neutron
+COMPILER=hana
+CLANG_DIR=/home/masaka/code/clang/hana-clang
 
 ##----------------------------------------------------------##
 # Clone ToolChain
@@ -85,6 +69,12 @@ function cloneTC() {
 	then
 	git clone --depth=1  https://gitlab.com/Project-Nexus/nexus-clang.git clang
 	PATH="${KERNEL_DIR}/clang/bin:$PATH"
+
+	elif [ $COMPILER = "hana" ];
+	then
+	if [ ! -d clang ]; then
+	#ln -sf "/home/masaka/code/clang/hana-clang" "${KERNEL_DIR}/clang"
+	PATH="${CLANG_DIR}/bin:$PATH"
 
 	elif [ $COMPILER = "neutron" ];
 	then
@@ -145,8 +135,7 @@ function cloneTC() {
         # Clone AnyKernel
         if [ -d AnyKernel3 ]; then
 		  rm -rf AnyKernel3
-		else
-		if [ "${DEVICE}" = "alioth" ]; then
+		elif [ "${DEVICE}" = "alioth" ]; then
           git clone --depth=1 https://github.com/NotZeetaa/AnyKernel3 -b alioth AnyKernel3
         elif [ "${DEVICE}" = "apollo" ]; then
           git clone --depth=1 https://github.com/NotZeetaa/AnyKernel3 -b apollo AnyKernel3
@@ -156,16 +145,16 @@ function cloneTC() {
 		  git clone --depth=1 https://github.com/NotZeetaa/AnyKernel3 -b lmi AnyKernel3
 		fi
 		fi
-	}
+}
 	
 ##------------------------------------------------------##
 # Export Variables
 function exports() {
 	
         # Export KBUILD_COMPILER_STRING
-        if [ -d ${KERNEL_DIR}/clang ];
+        if [ ! -d ${KERNEL_DIR}/clang ];
            then
-               export KBUILD_COMPILER_STRING=$(${KERNEL_DIR}/clang/bin/clang --version | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//')
+               export KBUILD_COMPILER_STRING=$(${CLANG_DIR}/bin/clang --version | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//')
         elif [ -d ${KERNEL_DIR}/gcc64 ];
            then
                export KBUILD_COMPILER_STRING=$("$KERNEL_DIR/gcc64"/bin/aarch64-elf-gcc --version | head -n 1)
@@ -179,8 +168,8 @@ function exports() {
         export SUBARCH=arm64
                
         # KBUILD HOST and USER
-        export KBUILD_BUILD_HOST=ArchLinux
-        export KBUILD_BUILD_USER="NotZeeta"
+        export KBUILD_BUILD_HOST=Fedora
+        export KBUILD_BUILD_USER="Wee Aris"
         
         # CI
         if [ "$CI" ]
@@ -201,36 +190,19 @@ function exports() {
 	export DISTRO=$(source /etc/os-release && echo "${NAME}")
 	}
         
-##----------------------------------------------------------------##
-# Telegram Bot Integration
 
-function post_msg() {
-	curl -s -X POST "https://api.telegram.org/bot$token/sendMessage" \
-	-d chat_id="$chat_id" \
-	-d "disable_web_page_preview=true" \
-	-d "parse_mode=html" \
-	-d text="$1"
-	}
-
-function push() {
-	curl -F document=@$1 "https://api.telegram.org/bot$token/sendDocument" \
-	-F chat_id="$chat_id" \
-	-F "disable_web_page_preview=true" \
-	-F "parse_mode=html" \
-	-F caption="$2"
-	}
 ##----------------------------------------------------------##
 # Compilation
 
-METHOD=$3
+METHOD=$2
 
 function compile() {
 START=$(date +"%s")
 	# Push Notification
-	post_msg "<b>$KBUILD_BUILD_VERSION CI Build Triggered</b>%0A<b>Docker OS: </b><code>$DISTRO</code>%0A<b>Kernel Version : </b><code>$KERVER</code>%0A<b>Date : </b><code>$(TZ=Europe/Lisbon date)</code>%0A<b>Device : </b><code>$MODEL [$DEVICE]</code>%0A<b>Pipeline Host : </b><code>$KBUILD_BUILD_HOST</code>%0A<b>Host Core Count : </b><code>$PROCS</code>%0A<b>Compiler Used : </b><code>$KBUILD_COMPILER_STRING</code>%0A<b>Branch : </b><code>$CI_BRANCH</code>%0A<b>Top Commit : </b><a href='$DRONE_COMMIT_LINK'>$COMMIT_HEAD</a>"
+	#post_msg "<b>$KBUILD_BUILD_VERSION CI Build Triggered</b>%0A<b>Docker OS: </b><code>$DISTRO</code>%0A<b>Kernel Version : </b><code>$KERVER</code>%0A<b>Date : </b><code>$(TZ=Europe/Lisbon date)</code>%0A<b>Device : </b><code>$MODEL [$DEVICE]</code>%0A<b>Pipeline Host : </b><code>$KBUILD_BUILD_HOST</code>%0A<b>Host Core Count : </b><code>$PROCS</code>%0A<b>Compiler Used : </b><code>$KBUILD_COMPILER_STRING</code>%0A<b>Branch : </b><code>$CI_BRANCH</code>%0A<b>Top Commit : </b><a href='$DRONE_COMMIT_LINK'>$COMMIT_HEAD</a>"
 	
 	# Compile
-	if [ -d ${KERNEL_DIR}/clang ];
+	if [ ! -d ${KERNEL_DIR}/clang ];
 	   then
            make O=out CC=clang ARCH=arm64 ${DEFCONFIG}
 		   if [ "$METHOD" = "lto" ]; then
@@ -278,10 +250,10 @@ START=$(date +"%s")
 	# Verify Files
 	if ! [ -a "$IMAGE" ];
 	   then
-	       push "error.log" "Build Throws Errors"
+	       #push "error.log" "Build Throws Errors"
 	       exit 1
 	   else
-	       post_msg " Kernel Compilation Finished. Started Zipping "
+	       #post_msg " Kernel Compilation Finished. Started Zipping "
 		   find ${OUT_DIR}/$dts_source -name '*.dtb' -exec cat {} + >${OUT_DIR}/arch/arm64/boot/dtb
 		   DTB=$(pwd)/out/arch/arm64/boot/dtb
 	fi
@@ -297,8 +269,11 @@ function zipping() {
 	# Zipping and Push Kernel
 	cd AnyKernel3 || exit 1
         zip -r9 ${FINAL_ZIP} *
-        MD5CHECK=$(md5sum "$FINAL_ZIP" | cut -d' ' -f1)
-        push "$FINAL_ZIP" "Build took : $(($DIFF / 60)) minute(s) and $(($DIFF % 60)) second(s) | For <b>$MODEL ($DEVICE)</b> | <b>${KBUILD_COMPILER_STRING}</b> | <b>MD5 Checksum : </b><code>$MD5CHECK</code>"
+        #MD5CHECK=$(md5sum "$FINAL_ZIP" | cut -d' ' -f1)
+		md5sum "$FINAL_ZIP" >"$FINAL_ZIP".md5sum
+        #push "$FINAL_ZIP" "Build took : $(($DIFF / 60)) minute(s) and $(($DIFF % 60)) second(s) | For <b>$MODEL ($DEVICE)</b> | <b>${KBUILD_COMPILER_STRING}</b> | <b>MD5 Checksum : </b><code>$MD5CHECK</code>"
+		mv ${ZIPNAME}-${VERSION}-${DEVICE}-* ../../image_output
+		echo "Zipped Succuss"
 		cd ..
         rm -rf AnyKernel3
         }
